@@ -166,7 +166,9 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/ml-explore/mlx-swift", from: "0.30.0"),
+        .package(
+            url: "https://github.com/TitoniumLab/mlx-swift.git",
+            revision: "3abb15146f54f16c782406f09efcc1e0157d9e57"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.1.6")
     ],
     targets: [
