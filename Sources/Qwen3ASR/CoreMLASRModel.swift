@@ -286,25 +286,19 @@ public class CoreMLASRModel {
         }
         suffixTokens.append(Int32(T.asrTextTokenId))
 
-        // 5. Prefill: process all prefix tokens
-        var lastLogits: MLMultiArray?
-
-        for token in prefixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
+        // 5. Prefill chat and audio in ANE-sized batches without MLX/Metal.
+        var lastLogits: MLMultiArray? = try decoder.decoderPrefillTokens(prefixTokens)
+        var consumed = 0
+        while consumed < numAudioTokens {
+            let n = min(decoder.prefillBatchSize, numAudioTokens - consumed)
+            lastLogits = try decoder.decoderPrefill(
+                embeddings: audioEmbeds,
+                offset: consumed,
+                realCount: n
+            )
+            consumed += n
         }
-
-        // 6. Prefill: process audio embeddings (MLX-free path)
-        for i in 0..<numAudioTokens {
-            let audioEmbed = try decoder.audioEmbeddingFromMultiArray(audioEmbeds, at: i)
-            lastLogits = try decoder.decoderStep(embedding: audioEmbed)
-        }
-
-        // Prefill: process suffix tokens
-        for token in suffixTokens {
-            let embedding = try decoder.embed(tokenId: token)
-            lastLogits = try decoder.decoderStep(embedding: embedding)
-        }
+        lastLogits = try decoder.decoderPrefillTokens(suffixTokens)
 
         // 7. Autoregressive generation (same EOS note as `transcribe()` —
         // see that path for the background).

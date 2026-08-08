@@ -278,17 +278,22 @@ public class CoreMLTextDecoder {
     /// currentPosition + N)``. ``N`` must be ``<= batchSize``. The
     /// returned MLMultiArray is the logits for the last real position.
     @discardableResult
-    public func decoderPrefill(embeddings: MLMultiArray, realCount n: Int) throws -> MLMultiArray {
+    public func decoderPrefill(
+        embeddings: MLMultiArray,
+        offset: Int = 0,
+        realCount n: Int
+    ) throws -> MLMultiArray {
         precondition(n > 0 && n <= batchSize,
                      "realCount \(n) must be in 1...\(batchSize)")
         let bufs = try writeChunk(realEmbeddingsSource: { (slot, dstPtr) in
-            let srcPtr = embeddings.dataPointer.assumingMemoryBound(to: Float.self)
             for t in 0..<n {
-                let srcOff = t * self.hiddenSize
-                let dstOff = (slot + t) * self.hiddenSize
-                for j in 0..<self.hiddenSize {
-                    dstPtr[dstOff + j] = srcPtr[srcOff + j]
-                }
+                Self.copyRow(
+                    from: embeddings,
+                    sourceRow: offset + t,
+                    hidden: self.hiddenSize,
+                    to: dstPtr,
+                    destSlot: slot + t
+                )
             }
         }, realCount: n)
         return try runParts(embeds: bufs.embeds, positions: bufs.positions, mask: bufs.mask)
@@ -544,12 +549,8 @@ public class CoreMLTextDecoder {
     public func audioEmbeddingFromMultiArray(_ embeddings: MLMultiArray, at index: Int) throws -> MLMultiArray {
         let hidden = embeddings.shape[2].intValue
         let result = try MLMultiArray(shape: [1, 1, hidden as NSNumber], dataType: .float32)
-        let srcPtr = embeddings.dataPointer.assumingMemoryBound(to: Float.self)
         let dstPtr = result.dataPointer.assumingMemoryBound(to: Float.self)
-        let offset = index * hidden
-        for i in 0..<hidden {
-            dstPtr[i] = srcPtr[offset + i]
-        }
+        Self.copyRow(from: embeddings, sourceRow: index, hidden: hidden, to: dstPtr, destSlot: 0)
         return result
     }
 
