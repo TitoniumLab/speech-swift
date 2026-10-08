@@ -1,6 +1,7 @@
 import XCTest
 import MLX
 import Foundation
+import Darwin
 @testable import Qwen3ASR
 
 /// Unit tests for the ``Qwen3ASRMemory`` helpers added by Bug 4b. These
@@ -8,6 +9,26 @@ import Foundation
 /// formatter. They are pure — no model download, no GPU — so they run on
 /// every CI shard.
 final class Qwen3MemoryGuardTests: XCTestCase {
+    func testLargeModelWarningSurvivesDisconnectedStandardError() {
+        var descriptors: [Int32] = [0, 0]
+        guard pipe(&descriptors) == 0 else { return XCTFail("Could not create diagnostic test pipe") }
+        defer { descriptors.forEach { close($0) } }
+        let savedStderr = dup(STDERR_FILENO)
+        guard savedStderr >= 0 else { return XCTFail("Could not preserve standard error") }
+        defer {
+            dup2(savedStderr, STDERR_FILENO)
+            close(savedStderr)
+        }
+        guard dup2(descriptors[1], STDERR_FILENO) >= 0,
+              fcntl(STDERR_FILENO, F_SETNOSIGPIPE, 1) == 0 else {
+            return XCTFail("Could not disconnect standard error")
+        }
+        close(descriptors[0])
+        descriptors[0] = -1
+
+        Qwen3ASRMemory.emitLargeRAMWarning(physicalMemoryBytes: 8 * 1_024 * 1_024 * 1_024)
+
+    }
 
     // MARK: - cacheLimitForLarge
 

@@ -4,6 +4,7 @@ import MLX
 import MLXNN
 import MLXFast
 import AudioCommon
+import os
 
 /// Optional decoder tunables for `Qwen3ASRModel.transcribe(audio:options:)`.
 ///
@@ -1178,7 +1179,7 @@ internal enum Qwen3ASRMemory {
         return physicalGB < largeModelRAMWarningThresholdGB
     }
 
-    /// Emit a human-readable RAM-pressure warning to stderr (NDJSON-IPC safe).
+    /// Emit a human-readable RAM-pressure warning through unified logging.
     /// Naming the alternative model IDs so the user can copy-paste.
     static func emitLargeRAMWarning(physicalMemoryBytes: UInt64) {
         let physicalGB = Double(physicalMemoryBytes) / 1_073_741_824.0
@@ -1189,7 +1190,7 @@ internal enum Qwen3ASRMemory {
             [Qwen3ASR]     aufklarer/Qwen3-ASR-0.6B-MLX-8bit   (recommended for 8-16 GB)
             [Qwen3ASR]     aufklarer/Qwen3-ASR-1.7B-MLX-4bit   (smaller, similar quality)
             """
-        FileHandle.standardError.write(Data((msg + "\n").utf8))
+        AudioLog.modelLoading.warning("\(msg, privacy: .public)")
     }
 
     /// Format memory readings (active / cache / peak in bytes) for
@@ -1231,8 +1232,8 @@ public extension Qwen3ASRModel {
 
         // Bug 4b: soft RAM warning for the 1.7B variant. Emit BEFORE the
         // download so users see it on the first byte, not after a 1.7 GB
-        // transfer. Routed to stderr to keep stdout clean for NDJSON-IPC
-        // consumers (speech-studio sidecar).
+        // transfer. Unified logging keeps it independent of the host's
+        // standard-output and standard-error stream lifetimes.
         if modelSize == .large {
             let physical = ProcessInfo.processInfo.physicalMemory
             if Qwen3ASRMemory.shouldWarnForLarge(physicalMemoryBytes: physical) {
