@@ -1466,3 +1466,47 @@ let package = Package(
     // XGrammar's headers need C++17; LocalVQEAECFrontend is C++17-clean.
     cxxLanguageStandard: .cxx17
 )
+
+let libraryTargetRoots = package.products
+    .compactMap { $0 as? Product.Library }
+    .flatMap(\.targets)
+
+let targetsByName = Dictionary(uniqueKeysWithValues: package.targets.map { ($0.name, $0) })
+
+func localTargetName(_ dependency: Target.Dependency) -> String? {
+    switch dependency {
+    case .targetItem(let name, _), .byNameItem(let name, _):
+        return targetsByName[name] == nil ? nil : name
+    default:
+        return nil
+    }
+}
+
+func packageName(_ dependency: Target.Dependency) -> String? {
+    if case .productItem(_, let package, _, _) = dependency { return package?.lowercased() }
+    return nil
+}
+
+var libraryTargetNames = Set<String>()
+var pendingTargetNames = libraryTargetRoots
+while let name = pendingTargetNames.popLast() {
+    guard libraryTargetNames.insert(name).inserted, let target = targetsByName[name] else { continue }
+    pendingTargetNames += target.dependencies.compactMap(localTargetName)
+}
+
+package.products = package.products.filter { $0 is Product.Library }
+package.targets = package.targets.filter { target in
+    if libraryTargetNames.contains(target.name) { return true }
+    guard target.type == .test else { return false }
+    return target.dependencies.allSatisfy { dependency in
+        localTargetName(dependency).map(libraryTargetNames.contains) ?? true
+    }
+}
+
+let usedPackageNames = Set(package.targets.flatMap(\.dependencies).compactMap(packageName))
+package.dependencies = package.dependencies.filter { dependency in
+    guard case .sourceControl(_, let location, _) = dependency.kind else { return true }
+    let lastComponent = location.split(separator: "/").last.map(String.init) ?? location
+    let identity = lastComponent.hasSuffix(".git") ? String(lastComponent.dropLast(4)) : lastComponent
+    return usedPackageNames.contains(identity.lowercased())
+}
