@@ -247,7 +247,7 @@ let package = Package(
     dependencies: [
         .package(
             url: "https://github.com/TitoniumLab/mlx-swift.git",
-            revision: "a515f3d095044848ce950ddc06fbbf9c80557aa2"),
+            revision: "fc9978b3a77f596262e3d232cd75a4ce62d922dd"),
         // Generic LLM runtime (loads standard HF MLX models: Qwen3, Gemma, Llama, …) — backs the
         // larger on-device chat model. The MLXLLM/MLXLMCommon libraries moved here from
         // mlx-swift-examples. Pins mlx-swift .upToNextMinor(0.31.4), compatible with ours.
